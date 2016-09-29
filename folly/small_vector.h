@@ -109,22 +109,7 @@ namespace detail {
     !FOLLY_IS_TRIVIALLY_COPYABLE(T)
   >::type
   moveToUninitialized(T* first, T* last, T* out) {
-    std::size_t idx = 0;
-    try {
-      for (; first != last; ++first, ++idx) {
-        new (&out[idx]) T(std::move(*first));
-      }
-    } catch (...) {
-      // Even for callers trying to give the strong guarantee
-      // (e.g. push_back) it's ok to assume here that we don't have to
-      // move things back and that it was a copy constructor that
-      // threw: if someone throws from a move constructor the effects
-      // are unspecified.
-      for (std::size_t i = 0; i < idx; ++i) {
-        out[i].~T();
-      }
-      throw;
-    }
+    std::uninitialized_copy(std::make_move_iterator(first), std::make_move_iterator(last), out);
   }
 
   // Specialization for trivially copyable types.
@@ -133,7 +118,7 @@ namespace detail {
     FOLLY_IS_TRIVIALLY_COPYABLE(T)
   >::type
   moveToUninitialized(T* first, T* last, T* out) {
-    std::memmove(out, first, (last - first) * sizeof *first);
+    std::memcpy(out, first, (last - first) * sizeof *first);
   }
 
   /*
@@ -156,13 +141,15 @@ namespace detail {
     T* in = lastConstructed - 1;
     try {
       for (; in != end && out >= lastConstructed; --in, --out) {
-        new (out) T(std::move(*in));
+        ::new (out) T(std::move(*in));
       }
       for (; in != end; --in, --out) {
         *out = std::move(*in);
       }
+      
+      //std::uninitialized_value_construct(lastConstructed, out);
       for (; out >= lastConstructed; --out) {
-        new (out) T();
+        ::new (out) T();
       }
     } catch (...) {
       // We want to make sure the same stuff is uninitialized memory
@@ -195,6 +182,7 @@ namespace detail {
    */
   template<class T, class Function>
   void populateMemForward(T* mem, std::size_t n, Function const& op) {
+    
     std::size_t idx = 0;
     try {
       for (size_t i = 0; i < n; ++i) {
@@ -246,7 +234,7 @@ namespace detail {
     }
 
   protected:
-    static bool const kShouldUseHeap = ShouldUseHeap;
+    static bool constexpr kShouldUseHeap = ShouldUseHeap;
 
   private:
     static SizeType const kExternMask =
