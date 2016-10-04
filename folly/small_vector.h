@@ -139,16 +139,30 @@ namespace detail {
     T* end = first - 1; // Past the end going backwards.
     T* out = realLast - 1;
     T* in = lastConstructed - 1;
+    
+    auto end_iter   = std::make_reverse_iterator(first);
+    auto begin_iter = std::make_reverse_iterator(lastConstructed);
+    auto out_iter   = std::make_reverse_iterator(realLast);
     try {
-      for (; in != end && out >= lastConstructed; --in, --out) {
-        ::new (out) T(std::move(*in));
-      }
-      for (; in != end; --in, --out) {
-        *out = std::move(*in);
-      }
+    
       
-      //std::uninitialized_value_construct(lastConstructed, out);
-      for (; out >= lastConstructed; --out) {
+     // for (; in != end && out >= lastConstructed; --in, --out) {
+     //   ::new (out) T(std::move(*in));
+     // }
+     
+     //make_move_iterator(end_iter) may be unnecessary if the comparisons can still hold
+       end_iter = std::uninitialized_copy( std::make_move_iterator(begin_iter), std::make_move_iterator(end_iter),
+                                out_iter);
+                                
+    //  for (; in != end; --in, --out) {
+    //    *out = std::move(*in);
+    //  }
+      
+      std::move_backwards(first, end_iter.base(), out_iter.base() - 1);
+      
+      
+      //std::uninitialized_value_construct(lastConstructed, out) as of C++17 
+      for (; out_iter >= lastConstructed; --out) {
         ::new (out) T();
       }
     } catch (...) {
@@ -186,7 +200,7 @@ namespace detail {
     std::size_t idx = 0;
     try {
       for (size_t i = 0; i < n; ++i) {
-        op(&mem[idx]);
+        op(std::addressof(mem[idx]));
         ++idx;
       }
     } catch (...) {
@@ -1055,17 +1069,17 @@ private:
   >::type InlineStorageType;
 #endif
 
-  static bool const kHasInlineCapacity =
+  static bool constexpr kHasInlineCapacity =
     sizeof(HeapPtrWithCapacity) < sizeof(InlineStorageType);
 
   // This value should we multiple of word size.
-  static size_t const kHeapifyCapacitySize = sizeof(
+  static size_t constexpr kHeapifyCapacitySize = sizeof(
     typename std::aligned_storage<
       sizeof(InternalSizeType),
       alignof(value_type)
     >::type);
   // Threshold to control capacity heapifying.
-  static size_t const kHeapifyCapacityThreshold =
+  static size_t constexpr kHeapifyCapacityThreshold =
     100 * kHeapifyCapacitySize;
 
   typedef typename std::conditional<
